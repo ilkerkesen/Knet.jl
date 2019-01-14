@@ -139,7 +139,7 @@ end
 
 """
 
-    mat(x) 
+    mat(x)
 
 Reshape x into a two-dimensional matrix.
 
@@ -176,81 +176,16 @@ function permutedims(x::KnetArray{T,N}, dims) where {T,N}
         if dims[1]==1 && dims[2]==2
             return copy(x)
         elseif dims[1]==2 && dims[2]==1
-            # Using CUDA kernel; performs worse
-            #=
-            funcName = permutefunc(x,dims)
-            y = similar(x, size(x,dims[1]), size(x,dims[2]))
-            #@eval ccall(($funcName,libknet8),Nothing,(Ptr{$T},Cint,Cint,Ptr{$T},Cint),
-            #            $x,size($x,1),size($x,2),$y,size($y,1))
-            @eval @knet8(($funcName,libknet8),Nothing,(Ptr{$T},Cint,Cint,Ptr{$T},Cint),
-                         $x,size($x,1),size($x,2),$y,size($y,1))
-            return y
-            =#
             # Using CUBLAS
             return _transpose(x)
         else
             throw(ArgumentError("no valid permutation of dimensions"))
         end
-    elseif N == 3
-        if dims[1]==1 && dims[2]==2 && dims[3]==3
-            return copy(x)
-        else
-            funcName = permutefunc(x,dims)
-            y = similar(x, size(x,dims[1]), size(x,dims[2]), size(x,dims[3]))
-            # @eval ccall(($funcName,libknet8),Nothing,(Ptr{$T},Cint,Cint,Cint,Ptr{$T},Cint,Cint),
-            #             $x,size($x,1),size($x,2),size($x,3),$y,size($y,1),size($y,2))
-            @eval @knet8($funcName,(Ptr{$T},Cint,Cint,Cint,Ptr{$T},Cint,Cint),
-                         $x,size($x,1),size($x,2),size($x,3),$y,size($y,1),size($y,2))
-            return y
-        end
-    elseif N == 4
-        if dims[1]==1 && dims[2]==2 && dims[3]==3 && dims[4]==4
-            return copy(x)
-        else
-            funcName = permutefunc(x,dims)
-            y = similar(x, size(x,dims[1]), size(x,dims[2]), size(x,dims[3]), size(x,dims[4]))
-            # @eval ccall(($funcName,libknet8),Nothing,(Ptr{$T},Cint,Cint,Cint,Cint,Ptr{$T},Cint,Cint,Cint),
-            #             $x,size($x,1),size($x,2),size($x,3),size($x,4),$y,size($y,1),size($y,2),size($y,3))
-            @eval @knet8($funcName,(Ptr{$T},Cint,Cint,Cint,Cint,Ptr{$T},Cint,Cint,Cint),
-                         $x,size($x,1),size($x,2),size($x,3),size($x,4),$y,size($y,1),size($y,2),size($y,3))
-            return y
-        end
-    elseif N == 5
-        if dims[1]==1 && dims[2]==2 && dims[3]==3 && dims[4]==4 && dims[5]==5
-            return copy(x)
-        else
-            funcName = permutefunc(x,dims)
-            y = similar(x, size(x,dims[1]), size(x,dims[2]), size(x,dims[3]), size(x,dims[4]), size(x,dims[5]))
-            @eval @knet8($funcName,(Ptr{$T},Cint,Cint,Cint,Cint,Cint,Ptr{$T},Cint,Cint,Cint,Cint),
-                         $x,size($x,1),size($x,2),size($x,3),size($x,4),size($x,5),$y,size($y,1),size($y,2),size($y,3),size($y,4))
-            return y
-        end
     else
-        error("Unsupported number of dimensions")
+        ca = Array(x)
+        pa = permutedims(ca, dims)
+        return KnetArray(pa)
     end
-end
-
-function permutefunc(x::KnetArray{T,N}, dims) where {T,N}
-    funcName = "permutedims_$(N)D_"
-    for i=1:N
-        funcName = funcName * "$(dims[i])_"
-    end
-    if T<:Float32
-        funcName = funcName * "32"
-    elseif T<:Float64
-        funcName = funcName * "64"
-    else
-        error("$T not supported")
-    end
-    return funcName
-end    
-
-function _ipermutedims(A::KnetArray,perm) # deprecated
-    iperm = Array{Int}(undef,length(perm))
-    for (i,p) = enumerate(perm)
-        iperm[p] = i
-    end
-    return permutedims(A,iperm)
 end
 
 # Low level gemm! call with pointers: CPU conv4 uses this. Based on julia/stdlib/v1.0/LinearAlgebra/src/blas.jl:1105
@@ -288,9 +223,8 @@ for (gemm, elty) in ((:dgemm_,:Float64), (:sgemm_,:Float32))
                    Ref{BlasInt}),
                   transA, transB, M, N, K,
                   alpha, A, lda,
-                  B, ldb, 
+                  B, ldb,
                   beta, C, ldc)
         end
     end
 end
-
